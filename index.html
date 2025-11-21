@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F3Up Config Editor</title>
+    <style>
+        /* --- FONT SETUP --- */
+        @font-face {
+            font-family: 'Minecraft';
+            src: url('main.ttc') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        /* --- VARS --- */
+        :root {
+            --bg-dark: #121212;
+            --bg-panel: #1e1e1e;
+            --bg-input: #252526;
+            --text-main: #d4d4d4;
+            --accent: #3c8527; /* Minecraft Green */
+            --accent-hover: #2a6e19;
+            --border: #333;
+            --highlight: #094771; /* VSCode selection */
+            --mc-shadow: #3f3f3f;
+            --sidebar-width: 400px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* --- LAYOUT --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: margin-left 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            z-index: 20;
+            flex-shrink: 0;
+            margin-left: 0;
+            position: relative;
+        }
+
+        .sidebar.collapsed {
+            margin-left: calc(var(--sidebar-width) * -1);
+        }
+
+        .main-content {
+            flex-grow: 1;
+            position: relative;
+            background-image: url('main.png');
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        /* --- SIDEBAR TOGGLE (TONGUE) --- */
+        .sidebar-toggle {
+            position: absolute;
+            right: -24px; /* Width of the tongue */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 60px;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
+            z-index: 30;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+            transition: background 0.2s;
+        }
+        .sidebar-toggle:hover { background-color: #2a2a2a; color: white; }
+        
+        /* --- SIDEBAR HEADER --- */
+        .sidebar-header {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sidebar-header h2 { margin: 0; font-size: 18px; font-weight: 600; color: #fff; }
+        .sidebar-header a { font-size: 12px; color: #4caf50; text-decoration: none; }
+
+        /* --- TOOLBAR & BUTTONS --- */
+        .action-area { padding: 10px; border-bottom: 1px solid var(--border); }
+
+        .btn {
+            background: #3c3c3c;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 2px;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #505050; }
+        
+        .btn-download {
+            display: block;
+            background: var(--accent);
+            border-color: var(--accent);
+            text-align: center;
+            text-decoration: none;
+            padding: 10px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-radius: 3px;
+        }
+        .btn-download:hover { background: var(--accent-hover); }
+
+        .toolbar { display: flex; gap: 8px; }
+
+        /* --- EDITOR AREA --- */
+        .editor-wrapper {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #jsonInput {
+            flex-grow: 1;
+            background-color: var(--bg-input);
+            color: #d4d4d4;
+            border: none;
+            padding: 15px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            white-space: pre;
+            overflow: auto;
+        }
+        #jsonInput.error { border-left: 3px solid #f44336; background: #251818; }
+
+        .status-bar {
+            height: 24px;
+            background: #007acc;
+            color: white;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            flex-shrink: 0;
+        }
+        .status-bar.error { background: #c72e0f; }
+
+        /* --- AUTOCOMPLETE SUGGESTIONS --- */
+        #suggestions {
+            position: absolute;
+            background: #252526;
+            border: 1px solid #454545;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+            width: 300px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+        .suggestion-item {
+            padding: 4px 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #2d2d2d;
+        }
+        .suggestion-item.selected { background-color: var(--highlight); color: white; }
+        .suggestion-item:hover { background-color: #2a2d2e; }
+        .s-key { color: #9cdcfe; font-weight: bold; }
+        .s-desc { color: #858585; margin-left: 10px; }
+        .s-color-preview { width: 10px; height: 10px; display: inline-block; margin-right: 5px; border: 1px solid #555; }
+
+        /* --- HUD PREVIEW --- */
+        .mc-font {
+            font-family: 'Minecraft', monospace;
+            font-size: 18px;
+            line-height: 18px;
+            color: #ffffff;
+            text-shadow: 2px 2px 0px var(--mc-shadow);
+            white-space: pre-wrap;
+            image-rendering: pixelated;
+        }
+
+        .hud-layer {
+            position: absolute;
+            top: 10px; left: 10px; right: 10px; bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+        .hud-column { display: flex; flex-direction: column; align-items: flex-start; }
+        .hud-right { align-items: flex-end; text-align: right; }
+        .hud-line {
+            background-color: #50505080;
+            padding: 0 2px;
+            margin-bottom: 0;
+            display: inline-block;
+        }
+        .hud-empty { height: 18px; }
+
+        /* --- COLORS --- */
+        .mc-0 { color: #000000; text-shadow: none; }
+        .mc-1 { color: #0000AA; text-shadow: 2px 2px 0px #00002A; }
+        .mc-2 { color: #00AA00; text-shadow: 2px 2px 0px #002A00; }
+        .mc-3 { color: #00AAAA; text-shadow: 2px 2px 0px #002A2A; }
+        .mc-4 { color: #AA0000; text-shadow: 2px 2px 0px #2A0000; }
+        .mc-5 { color: #AA00AA; text-shadow: 2px 2px 0px #2A002A; }
+        .mc-6 { color: #FFAA00; text-shadow: 2px 2px 0px #2A2A00; }
+        .mc-7 { color: #AAAAAA; text-shadow: 2px 2px 0px #2A2A2A; }
+        .mc-8 { color: #555555; text-shadow: 2px 2px 0px #151515; }
+        .mc-9 { color: #5555FF; text-shadow: 2px 2px 0px #15153F; }
+        .mc-a { color: #55FF55; text-shadow: 2px 2px 0px #153F15; }
+        .mc-b { color: #55FFFF; text-shadow: 2px 2px 0px #153F3F; }
+        .mc-c { color: #FF5555; text-shadow: 2px 2px 0px #3F1515; }
+        .mc-d { color: #FF55FF; text-shadow: 2px 2px 0px #3F153F; }
+        .mc-e { color: #FFFF55; text-shadow: 2px 2px 0px #3F3F15; }
+        .mc-f { color: #FFFFFF; text-shadow: 2px 2px 0px #3F3F3F; }
+        .mc-l { font-weight: bold; }
+        .mc-o { font-style: italic; }
+        .mc-n { text-decoration: underline; }
+        .mc-m { text-decoration: line-through; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <!-- Tongue Toggle -->
+        <div class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle Sidebar">
+            <span id="toggleIcon">◀</span>
+        </div>
+
+        <div class="sidebar-header">
+            <h2>F3Up Editor</h2>
+            <a href="https://modrinth.com/mod/f3up" target="_blank">View on Modrinth</a>
+        </div>
+        
+        <div class="action-area">
+            <a href="https://modrinth.com/mod/f3up" target="_blank" class="btn btn-download">Download F3Up Mod</a>
+            <div class="toolbar">
+                <button class="btn" onclick="formatJSON()">Prettify</button>
+                <button class="btn" onclick="loadDefault()">Reset</button>
+            </div>
+        </div>
+
+        <div class="editor-wrapper" id="editorWrapper">
+            <textarea id="jsonInput" spellcheck="false" oninput="updatePreview()"></textarea>
+            <!-- Autocomplete Box -->
+            <div id="suggestions"></div>
+        </div>
+
+        <div class="status-bar" id="statusBar">Type '{' for placeholders, '§' for colors</div>
+    </div>
+
+    <div class="main-content">
+        <div class="hud-layer mc-font">
+            <div class="hud-column" id="hudLeft"></div>
+            <div class="hud-column hud-right" id="hudRight"></div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // DATA
+        // ==========================================
+        const PLACEHOLDERS = [
+            {k: "player.x", d: "X Coordinate"}, {k: "player.y", d: "Y Coordinate"}, {k: "player.z", d: "Z Coordinate"},
+            {k: "player.name", d: "Name"}, {k: "player.health", d: "HP"}, {k: "player.biome", d: "Biome"},
+            {k: "world.biome.local_name", d: "Biome (Localized)"}, {k: "world.biome.en_us", d: "Biome (English)"},
+            {k: "world.time_24h", d: "Game Time"}, {k: "system.time_24h", d: "Real Time"},
+            {k: "hand.item.local_name", d: "Item Name"}, {k: "hand.item.id", d: "Item ID"},
+            {k: "game.fps", d: "FPS"}, {k: "server.ip", d: "IP"}, {k: "default", d: "Vanilla Module Info"}
+        ];
+
+        const COLORS = [
+            {k: "0", d: "Black", c: "#000"}, {k: "1", d: "Dark Blue", c: "#00a"}, {k: "2", d: "Dark Green", c: "#0a0"},
+            {k: "3", d: "Dark Aqua", c: "#0aa"}, {k: "4", d: "Dark Red", c: "#a00"}, {k: "5", d: "Dark Purple", c: "#a0a"},
+            {k: "6", d: "Gold", c: "#fa0"}, {k: "7", d: "Gray", c: "#aaa"}, {k: "8", d: "Dark Gray", c: "#555"},
+            {k: "9", d: "Blue", c: "#55f"}, {k: "a", d: "Green", c: "#5f5"}, {k: "b", d: "Aqua", c: "#5ff"},
+            {k: "c", d: "Red", c: "#f55"}, {k: "d", d: "Light Purple", c: "#f5f"}, {k: "e", d: "Yellow", c: "#ff5"},
+            {k: "f", d: "White", c: "#fff"}, {k: "l", d: "Bold", c: "transparent"}, {k: "o", d: "Italic", c: "transparent"},
+            {k: "r", d: "Reset", c: "transparent"}
+        ];
+
+        const MOCK = {
+            "player.x": "1254.50", "player.y": "64.00", "player.z": "-345.22",
+            "player.name": "Player", "player.health": "20",
+            "world.biome.local_name": "Plains", "world.biome.en_us": "Plains",
+            "world.time_24h": "14:30", "system.time_24h": "22:45",
+            "hand.item.local_name": "Diamond Sword", "hand.item.id": "minecraft:diamond_sword",
+            "game.fps": "120", "server.ip": "hypixel.net",
+            "minecraft:game_renderer": ["Minecraft 1.21.9 (Fabric)", "144 fps T: 120", "300/300 fps"],
+            "minecraft:level": ["XYZ: 1254.5 / 64.0 / -345.2", "Block: 1254 64 -345", "Chunk: 6 9 in 78 -21", "Facing: east (Towards positive X)"],
+            "minecraft:system": ["Java: 21.0.2 64bit", "Mem: 25% 4096/8192MB", "Allocated: 50% 8192MB"]
+        };
+
+        const DEFAULT_CONFIG = {
+          "generated_for_version": "1.21.9",
+          "global_update_frequency_ms": 250,
+          "available_placeholders": [],
+          "entries": [
+            {
+              "id": "f3up:custom_info",
+              "enabled": true,
+              "side": "right",
+              "order": 50,
+              "category": "F3Up Custom",
+              "menu_name": "F3Up Example",
+              "menu_tooltip": "Example module.",
+              "lines": [
+                "§b--- F3Up Info ---",
+                "§eBiome: §f{world.biome.local_name} §7({world.biome.en_us})",
+                "§eItem: §f{hand.item.local_name}",
+                "§eTime: §f{system.time_24h}",
+                "§o§8>> Donate: boosty.to/infikot <<"
+              ]
+            },
+            { "id": "minecraft:game_renderer", "enabled": true, "side": "left", "order": 100, "category": "Game", "menu_name": "game_renderer", "menu_tooltip": "", "lines": ["{default}"] },
+            { "id": "minecraft:level", "enabled": true, "side": "left", "order": 200, "category": "Level", "menu_name": "level", "menu_tooltip": "", "lines": ["{default}"] },
+            { "id": "minecraft:system", "enabled": true, "side": "right", "order": 100, "category": "System", "menu_name": "system", "menu_tooltip": "", "lines": ["{default}"] }
+          ]
+        };
+
+        // ==========================================
+        // LOGIC
+        // ==========================================
+        const jsonInput = document.getElementById('jsonInput');
+        const suggestionsBox = document.getElementById('suggestions');
+        const editorWrapper = document.getElementById('editorWrapper');
+        const hudLeft = document.getElementById('hudLeft');
+        const hudRight = document.getElementById('hudRight');
+        
+        let suggestionIndex = 0;
+        let visibleSuggestions = [];
+        let activeTrigger = null; // '{' or '§'
+
+        // --- Undo/Redo Safe Insert ---
+        function insertText(text) {
+            jsonInput.focus();
+            // ExecCommand 'insertText' preserves undo history natively
+            const success = document.execCommand('insertText', false, text);
+            if (!success) {
+                // Fallback (clears undo stack in some browsers, but works)
+                jsonInput.setRangeText(text, jsonInput.selectionStart, jsonInput.selectionEnd, 'end');
+            }
+            updatePreview();
+            hideSuggestions();
+        }
+
+        // --- Autocomplete Logic ---
+        jsonInput.addEventListener('keydown', (e) => {
+            if (suggestionsBox.style.display === 'block') {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    suggestionIndex = (suggestionIndex + 1) % visibleSuggestions.length;
+                    renderSuggestions();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    suggestionIndex = (suggestionIndex - 1 + visibleSuggestions.length) % visibleSuggestions.length;
+                    renderSuggestions();
+                } else if (e.key === 'Tab' || e.key === 'Enter') {
+                    e.preventDefault();
+                    const item = visibleSuggestions[suggestionIndex];
+                    if (item) {
+                        applySuggestion(item);
+                    }
+                } else if (e.key === 'Escape') {
+                    hideSuggestions();
+                }
+            }
+        });
+
+        jsonInput.addEventListener('input', (e) => {
+            const val = jsonInput.value;
+            const cursor = jsonInput.selectionEnd;
+            
+            // Check for '{' trigger
+            const lastBrace = val.lastIndexOf('{', cursor - 1);
+            const lastClose = val.lastIndexOf('}', cursor - 1);
+            const lastQuote = val.lastIndexOf('"', cursor - 1);
+            
+            // Check for '§' trigger
+            const lastSection = val.lastIndexOf('§', cursor - 1);
+
+            if (lastSection !== -1 && lastSection > lastBrace && (cursor - lastSection) <= 2) {
+                 // Color mode
+                 activeTrigger = '§';
+                 showSuggestions(lastSection, COLORS, val.substring(lastSection + 1, cursor));
+                 return;
+            }
+
+            if (lastBrace !== -1 && lastBrace > lastClose && lastBrace > lastQuote) {
+                // Placeholder mode
+                activeTrigger = '{';
+                const query = val.substring(lastBrace + 1, cursor);
+                showSuggestions(lastBrace, PLACEHOLDERS, query);
+                return;
+            }
+
+            hideSuggestions();
+            updatePreview();
+        });
+
+        function showSuggestions(triggerIndex, list, query) {
+            const q = query.toLowerCase();
+            visibleSuggestions = list.filter(i => i.k.toLowerCase().startsWith(q));
+            
+            if (visibleSuggestions.length === 0) {
+                hideSuggestions();
+                return;
+            }
+
+            suggestionIndex = 0;
+            
+            // Position Logic (Approximate)
+            const coordinates = getCaretCoordinates(jsonInput, jsonInput.selectionEnd);
+            suggestionsBox.style.left = coordinates.left + 'px';
+            // Adjust for scrolling of textarea
+            suggestionsBox.style.top = (coordinates.top + 20 - jsonInput.scrollTop) + 'px'; 
+            suggestionsBox.style.display = 'block';
+            
+            renderSuggestions();
+        }
+
+        function renderSuggestions() {
+            suggestionsBox.innerHTML = '';
+            visibleSuggestions.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'suggestion-item' + (idx === suggestionIndex ? ' selected' : '');
+                
+                let content = '';
+                if (item.c) { // Color
+                    content += `<span class="s-color-preview" style="background:${item.c}"></span>`;
+                }
+                content += `<span class="s-key">${item.k}</span><span class="s-desc">${item.d}</span>`;
+                
+                div.innerHTML = content;
+                div.onmousedown = (e) => { e.preventDefault(); applySuggestion(item); };
+                suggestionsBox.appendChild(div);
+            });
+        }
+
+        function applySuggestion(item) {
+            const cursor = jsonInput.selectionEnd;
+            const val = jsonInput.value;
+            let start = 0;
+            
+            if (activeTrigger === '{') {
+                start = val.lastIndexOf('{', cursor - 1);
+                // Replace {query with {key}
+                const textToInsert = item.k + "}"; // item.k is just key e.g "player.x"
+                // Using execCommand for delete + insert to preserve history is tricky.
+                // We select the partial text and replace.
+                jsonInput.setSelectionRange(start, cursor);
+                insertText("{" + item.k + "}");
+            } else if (activeTrigger === '§') {
+                start = val.lastIndexOf('§', cursor - 1);
+                jsonInput.setSelectionRange(start, cursor);
+                insertText("§" + item.k);
+            }
+            hideSuggestions();
+        }
+
+        function hideSuggestions() {
+            suggestionsBox.style.display = 'none';
+            activeTrigger = null;
+        }
+
+        // --- Caret Coordinates Helper ---
+        // Minimal version to find pixel position of cursor in textarea
+        function getCaretCoordinates(element, position) {
+            const div = document.createElement('div');
+            document.body.appendChild(div);
+            const style = window.getComputedStyle(element);
+            
+            for (const prop of ['direction', 'boxSizing', 'width', 'height', 'overflowX', 'overflowY', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize', 'fontSizeAdjust', 'lineHeight', 'fontFamily', 'textAlign', 'textTransform', 'textIndent', 'textDecoration', 'letterSpacing', 'wordSpacing']) {
+                div.style[prop] = style[prop];
+            }
+            
+            div.style.position = 'absolute';
+            div.style.visibility = 'hidden';
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.wordWrap = 'break-word';
+            
+            div.textContent = element.value.substring(0, position);
+            const span = document.createElement('span');
+            span.textContent = element.value.substring(position) || '.';
+            div.appendChild(span);
+            
+            const coords = {
+                top: span.offsetTop + element.offsetTop,
+                left: span.offsetLeft + element.offsetLeft
+            };
+            document.body.removeChild(div);
+            return coords;
+        }
+
+        // --- Main Logic ---
+
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const icon = document.getElementById('toggleIcon');
+            sb.classList.toggle('collapsed');
+            icon.textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+        }
+
+        function loadDefault() {
+            jsonInput.value = JSON.stringify(DEFAULT_CONFIG, null, 2);
+            updatePreview();
+        }
+
+        function formatJSON() {
+            try {
+                const v = JSON.parse(jsonInput.value);
+                jsonInput.value = JSON.stringify(v, null, 2);
+                updatePreview();
+            } catch(e) { alert("Invalid JSON"); }
+        }
+
+        function parseColors(text) {
+            const colorMap = {'0':'mc-0','1':'mc-1','2':'mc-2','3':'mc-3','4':'mc-4','5':'mc-5','6':'mc-6','7':'mc-7','8':'mc-8','9':'mc-9','a':'mc-a','b':'mc-b','c':'mc-c','d':'mc-d','e':'mc-e','f':'mc-f'};
+            const fmtMap = {'l':'mc-l','m':'mc-m','n':'mc-n','o':'mc-o','r':'reset'};
+            let html = "", classes = new Set(['mc-f']);
+            const parts = text.split(/(§[0-9a-fk-or])/g);
+            for(let p of parts) {
+                if(p.startsWith('§')) {
+                    const c = p.charAt(1).toLowerCase();
+                    if(colorMap[c]) { classes.clear(); classes.add(colorMap[c]); }
+                    else if(fmtMap[c]) { if(fmtMap[c]==='reset') {classes.clear(); classes.add('mc-f');} else classes.add(fmtMap[c]); }
+                } else if(p) {
+                    html += `<span class="${Array.from(classes).join(' ')}">${p.replace(/</g,"&lt;")}</span>`;
+                }
+            }
+            return html;
+        }
+
+        function replacePlaceholders(text) {
+            return text.replace(/\{([^}]+)\}/g, (m, p1) => {
+                const k = p1.split(':')[0];
+                if(MOCK[k]) return MOCK[k];
+                if(k.startsWith('range')) return "5";
+                if(k.startsWith('inventory')) return "32";
+                return m;
+            });
+        }
+
+        function updatePreview() {
+            let conf;
+            try {
+                conf = JSON.parse(jsonInput.value);
+                jsonInput.classList.remove('error');
+                document.getElementById('statusBar').textContent = "Valid JSON";
+                document.getElementById('statusBar').classList.remove('error');
+            } catch(e) {
+                jsonInput.classList.add('error');
+                document.getElementById('statusBar').textContent = "Error: " + e.message;
+                document.getElementById('statusBar').classList.add('error');
+                return;
+            }
+            if(!conf.entries) return;
+            
+            hudLeft.innerHTML = "";
+            hudRight.innerHTML = "";
+
+            const render = (arr, el) => {
+                arr.forEach((entry, i) => {
+                    if(!entry.lines) return;
+                    entry.lines.forEach(line => {
+                        if(line.includes("{default}") && MOCK[entry.id]) {
+                            MOCK[entry.id].forEach(l => {
+                                const d = document.createElement('div');
+                                d.className = 'hud-line';
+                                d.innerHTML = parseColors(l);
+                                el.appendChild(d);
+                            });
+                        } else {
+                            const d = document.createElement('div');
+                            d.className = 'hud-line';
+                            d.innerHTML = parseColors(replacePlaceholders(line));
+                            el.appendChild(d);
+                        }
+                    });
+                    if(i < arr.length-1) el.appendChild(Object.assign(document.createElement('div'),{className:'hud-empty'}));
+                });
+            };
+
+            render(conf.entries.filter(e=>e.enabled&&e.side==='left').sort((a,b)=>a.order-b.order), hudLeft);
+            render(conf.entries.filter(e=>e.enabled&&e.side==='right').sort((a,b)=>a.order-b.order), hudRight);
+        }
+
+        // Init
+        loadDefault();
+    </script>
+</body>
+</html>
